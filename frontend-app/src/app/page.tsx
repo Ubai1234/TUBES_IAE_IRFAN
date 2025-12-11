@@ -1,425 +1,268 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useQuery, useMutation, gql, useSubscription } from '@apollo/client';
-// --- MODIFIKASI DIMULAI: Import teamApi ---
-import { authApi, teamApi, userApi } from '@/lib/api';
-// --- MODIFIKASI SELESAI ---
+import { gql, useQuery, useMutation } from '@apollo/client';
 
-// --- MODIFIKASI DIMULAI: Mengganti Kueri GraphQL ---
-const GET_TASKS = gql`
-  query GetTasks {
-    tasks {
+// --- DEFINISI GRAPHQL QUERY & MUTATION ---
+const GET_ROOMS = gql`
+  query GetRooms {
+    rooms {
       id
-      title
-      description
+      number
+      price
+      facilities
       status
-      author
-      createdAt
     }
   }
 `;
 
-const CREATE_TASK = gql`
-  mutation CreateTask($title: String!, $description: String) {
-    createTask(title: $title, description: $description) {
+const CREATE_ROOM = gql`
+  mutation CreateRoom($number: String!, $price: Int!, $facilities: String) {
+    createRoom(number: $number, price: $price, facilities: $facilities) {
       id
-      title
-      description
+      number
       status
-      author
-      createdAt
     }
   }
 `;
 
-const UPDATE_TASK_STATUS = gql`
-  mutation UpdateTaskStatus($id: ID!, $status: TaskStatus!) {
-    updateTaskStatus(id: $id, status: $status) {
+const BOOK_ROOM = gql`
+  mutation BookRoom($id: ID!) {
+    bookRoom(id: $id) {
       id
       status
     }
   }
 `;
 
-// Subscription untuk notifikasi real-time
-const TASK_ADDED_SUBSCRIPTION = gql`
-  subscription OnTaskAdded {
-    taskAdded {
-      id
-      title
-      author
-    }
+const DELETE_ROOM = gql`
+  mutation DeleteRoom($id: ID!) {
+    deleteRoom(id: $id)
   }
 `;
-// --- MODIFIKASI SELESAI ---
 
+// --- TIPE DATA ---
+interface Room {
+  id: string;
+  number: string;
+  price: number;
+  facilities: string;
+  status: 'TERSEDIA' | 'DIPESAN' | 'TERISI';
+}
 
 export default function Home() {
-  const [token, setToken] = useState<string | null>(null);
+  // State untuk Role (Simulasi Login)
+  const [role, setRole] = useState<'admin' | 'user'>('user');
   
-  // --- MODIFIKASI DIMULAI: State untuk data baru ---
-  const [teams, setTeams] = useState<any[]>([]); // State untuk tim
-  const [users, setUsers] = useState<any[]>([]); // State untuk users
-  const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<'login' | 'register'>('login'); 
+  // State Form
+  const [newRoomNumber, setNewRoomNumber] = useState('');
+  const [newRoomPrice, setNewRoomPrice] = useState('');
+  const [newRoomFacilities, setNewRoomFacilities] = useState('');
 
-  const [regForm, setRegForm] = useState({ name: '', email: '', password: '' });
-  const [loginForm, setLoginForm] = useState({ email: '', password: '' });
+  // Apollo Client Hooks
+  const { loading, error, data, refetch } = useQuery(GET_ROOMS);
   
-  // State baru untuk form task
-  const [newTask, setNewTask] = useState({ title: '', description: '' });
-  // --- MODIFIKASI SELESAI ---
-
-  useEffect(() => {
-    const storedToken = localStorage.getItem('token');
-    if (storedToken) {
-      setToken(storedToken);
-    } else {
-      setLoading(false); 
-    }
-  }, []);
-
-  // --- MODIFIKASI DIMULAI: Kueri GraphQL baru ---
-  const { data: tasksData, loading: tasksLoading, refetch: refetchTasks } = useQuery(GET_TASKS, {
-    skip: !token, // Jangan fetch jika belum login
+  const [createRoom] = useMutation(CREATE_ROOM, { 
+    onCompleted: () => {
+      refetch();
+      setNewRoomNumber('');
+      setNewRoomPrice('');
+      setNewRoomFacilities('');
+      alert('Kamar berhasil ditambahkan!');
+    } 
   });
-  const [createTask] = useMutation(CREATE_TASK);
-  const [updateTaskStatus] = useMutation(UPDATE_TASK_STATUS);
-  
-  // Menjalankan subscription
-  useSubscription(TASK_ADDED_SUBSCRIPTION, {
-    onData: ({ data }) => {
-      const task = data?.data?.taskAdded;
-      if (task) {
-        alert(`NOTIFIKASI REAL-TIME:\nTask baru ditambahkan: "${task.title}" oleh ${task.author}`);
-        refetchTasks(); // Muat ulang daftar task
-      }
+
+  const [bookRoom] = useMutation(BOOK_ROOM, {
+    onCompleted: () => {
+      refetch();
+      alert('Berhasil booking kamar!');
     },
-    skip: !token
+    onError: (err) => alert(err.message)
   });
-  // --- MODIFIKASI SELESAI ---
 
+  const [deleteRoom] = useMutation(DELETE_ROOM, {
+    onCompleted: () => refetch()
+  });
 
-  // Fetch data REST API (Teams & Users)
-  useEffect(() => {
-    if (token) {
-      setLoading(true);
-      fetchTeamsAndUsers();
-    }
-  }, [token]);
-
-  // --- MODIFIKASI DIMULAI: Fungsi Fetch Baru ---
-  const fetchTeamsAndUsers = async () => {
-    try {
-      // Ambil data teams dan users secara bersamaan
-      const [teamResponse, userResponse] = await Promise.all([
-        teamApi.getTeams(),
-        userApi.getUsers() // Ambil semua user
-      ]);
-      setTeams(teamResponse.data);
-      setUsers(userResponse.data);
-    } catch (error) {
-      console.error('Error fetching data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-  // --- MODIFIKASI SELESAI ---
-
-  // Handler untuk Auth (Login/Register/Logout) - Ini tetap sama
-  const handleRegister = async (e: React.FormEvent) => {
+  // --- HANDLERS ---
+  const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      await authApi.register(regForm);
-      alert('Registration successful! Please login.');
-      setRegForm({ name: '', email: '', password: '' });
-      setView('login'); 
-    } catch (error) {
-      console.error('Error registering:', error);
-      alert('Registration failed.');
-    }
+    createRoom({
+      variables: {
+        number: newRoomNumber,
+        price: parseInt(newRoomPrice),
+        facilities: newRoomFacilities
+      },
+      context: {
+        headers: {
+          // Simulasi mengirim data user lewat header (sesuai logika backend server.js tadi)
+          'x-user-payload': JSON.stringify({ email: 'admin@test.com', role: 'admin' })
+        }
+      }
+    });
   };
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const response = await authApi.login(loginForm);
-      const { token } = response.data;
+  const handleBook = (id: string) => {
+    bookRoom({
+      variables: { id },
+      context: {
+        headers: {
+          'x-user-payload': JSON.stringify({ email: 'user@test.com', role: 'user' })
+        }
+      }
+    });
+  };
+
+  const handleDelete = (id: string) => {
+    if(!confirm('Hapus kamar ini?')) return;
+    deleteRoom({
+      variables: { id },
+      context: {
+        headers: {
+          'x-user-payload': JSON.stringify({ email: 'admin@test.com', role: 'admin' })
+        }
+      }
+    });
+  };
+
+  // --- RENDER ---
+  return (
+    <div className="min-h-screen bg-gray-100 p-8">
       
-      localStorage.setItem('token', token);
-      setToken(token); 
-      
-      setLoginForm({ email: '', password: '' });
-      refetchTasks(); // Panggil refetch task setelah login
-    } catch (error) {
-      console.error('Error logging in:', error);
-      alert('Login failed. Check credentials.');
-    }
-  };
+      {/* HEADER & ROLE SWITCHER */}
+      <div className="flex justify-between items-center mb-8 bg-white p-4 rounded shadow">
+        <h1 className="text-2xl font-bold text-blue-600">🏠 Kost Management App</h1>
+        
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-500">Simulasi Login sebagai:</span>
+          <select 
+            value={role} 
+            onChange={(e) => setRole(e.target.value as 'admin' | 'user')}
+            className="border p-2 rounded bg-gray-50 font-bold"
+          >
+            <option value="user">Anak Kost (User)</option>
+            <option value="admin">Pemilik Kost (Admin)</option>
+          </select>
+        </div>
+      </div>
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    setToken(null);
-    setUsers([]); 
-    setTeams([]);
-    setView('login');
-  };
-  
-  // --- MODIFIKASI DIMULAI: Handler untuk Task ---
-  // --- MODIFIKASI DIMULAI: Handler untuk Task ---
-  const handleCreateTask = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await createTask({
-        variables: newTask,
-      });
-      setNewTask({ title: '', description: '' });
-      
-      // TAMBAHKAN BARIS INI:
-      refetchTasks(); 
-      // Ini akan langsung me-refresh daftar task di bawah
-
-    } catch (error) {
-      console.error('Error creating task:', error);
-      alert('Failed to create task.');
-    }
-  };
-  
-  const handleStatusChange = async (taskId: string, newStatus: string) => {
-    try {
-      await updateTaskStatus({
-        variables: { id: taskId, status: newStatus }
-      });
-      refetchTasks();
-    } catch (error) {
-      console.error('Error updating task status:', error);
-    }
-  };
-  // --- MODIFIKASI SELESAI ---
-
-  // Tampilan Loading
-  if (loading && token === null) {
-     return <div className="min-h-screen flex items-center justify-center">Loading...</div>
-  }
-
-  // Tampilan Halaman Auth (Login/Register) - Ini tetap sama
-  if (!token) {
-    return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-md w-full space-y-8">
-          <h1 className="text-4xl font-bold text-center text-gray-900">
-            {/* --- MODIFIKASI: Judul --- */}
-            Task Management App
-          </h1>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        
+        {/* KOLOM KIRI: DAFTAR KAMAR */}
+        <div className="md:col-span-2">
+          <h2 className="text-xl font-bold mb-4">Daftar Kamar</h2>
           
-          {view === 'login' && (
-            <div className="bg-white shadow rounded-lg p-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">Login</h2>
-              <form onSubmit={handleLogin} className="mb-6">
-                <div className="grid grid-cols-1 gap-4">
-                  <input
-                    type="email"
-                    placeholder="Email"
-                    value={loginForm.email}
-                    onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
-                    className="border rounded-md px-3 py-2"
-                    required
-                  />
-                  <input
-                    type="password"
-                    placeholder="Password"
-                    value={loginForm.password}
-                    onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
-                    className="border rounded-md px-3 py-2"
-                    required
-                  />
-                  <button
-                    type="submit"
-                    className="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 w-full"
-                  >
-                    Login
-                  </button>
+          {loading && <p>Loading data...</p>}
+          {error && <p className="text-red-500">Error: {error.message}</p>}
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {data?.rooms.map((room: Room) => (
+              <div key={room.id} className={`p-4 rounded shadow border-l-4 ${
+                room.status === 'TERSEDIA' ? 'bg-white border-green-500' : 
+                room.status === 'DIPESAN' ? 'bg-yellow-50 border-yellow-500' : 'bg-gray-200 border-gray-500'
+              }`}>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="font-bold text-lg">Kamar {room.number}</h3>
+                    <p className="text-gray-600">Rp {room.price.toLocaleString()}</p>
+                    <p className="text-sm text-gray-500 mt-1">{room.facilities}</p>
+                  </div>
+                  <span className={`text-xs px-2 py-1 rounded font-bold ${
+                    room.status === 'TERSEDIA' ? 'bg-green-100 text-green-800' : 
+                    room.status === 'DIPESAN' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-300 text-gray-800'
+                  }`}>
+                    {room.status}
+                  </span>
                 </div>
-              </form>
-              <p className="text-center text-sm">
-                Belum punya akun?{' '}
-                <button
-                  onClick={() => setView('register')}
-                  className="font-medium text-blue-600 hover:text-blue-500"
+
+                {/* TOMBOL AKSI BERDASARKAN ROLE */}
+                <div className="mt-4 pt-4 border-t flex justify-end gap-2">
+                  
+                  {/* Jika User & Kamar Tersedia -> Muncul Tombol BOOK */}
+                  {role === 'user' && room.status === 'TERSEDIA' && (
+                    <button 
+                      onClick={() => handleBook(room.id)}
+                      className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm"
+                    >
+                      Sewa Sekarang
+                    </button>
+                  )}
+
+                  {/* Jika Admin -> Muncul Tombol DELETE */}
+                  {role === 'admin' && (
+                    <button 
+                      onClick={() => handleDelete(room.id)}
+                      className="text-red-500 hover:text-red-700 text-sm underline"
+                    >
+                      Hapus
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* KOLOM KANAN: FORM ADMIN (Hanya muncul jika Admin) */}
+        <div>
+          {role === 'admin' ? (
+            <div className="bg-white p-6 rounded shadow sticky top-4">
+              <h2 className="text-xl font-bold mb-4 text-gray-800">Tambah Kamar Baru</h2>
+              <form onSubmit={handleCreate} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Nomor Kamar</label>
+                  <input 
+                    type="text" 
+                    value={newRoomNumber}
+                    onChange={(e) => setNewRoomNumber(e.target.value)}
+                    className="w-full border p-2 rounded"
+                    placeholder="Contoh: A-101"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Harga (Per Bulan)</label>
+                  <input 
+                    type="number" 
+                    value={newRoomPrice}
+                    onChange={(e) => setNewRoomPrice(e.target.value)}
+                    className="w-full border p-2 rounded"
+                    placeholder="1500000"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Fasilitas</label>
+                  <textarea 
+                    value={newRoomFacilities}
+                    onChange={(e) => setNewRoomFacilities(e.target.value)}
+                    className="w-full border p-2 rounded"
+                    placeholder="AC, WiFi, dll..."
+                  />
+                </div>
+                <button 
+                  type="submit" 
+                  className="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700 font-bold"
                 >
-                  Register di sini
+                  + Simpan Kamar
                 </button>
+              </form>
+            </div>
+          ) : (
+            // Info box untuk User
+            <div className="bg-blue-50 p-6 rounded border border-blue-200">
+              <h3 className="font-bold text-blue-800 mb-2">👋 Selamat Datang!</h3>
+              <p className="text-sm text-blue-700">
+                Silakan pilih kamar yang statusnya <strong>TERSEDIA</strong> dan klik tombol "Sewa Sekarang".
               </p>
+              <div className="mt-4 text-xs text-gray-500">
+                (Ubah dropdown di atas menjadi 'Pemilik Kost' untuk menambah kamar)
+              </div>
             </div>
           )}
-
-          {view === 'register' && (
-             <div className="bg-white shadow rounded-lg p-6">
-             <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">Register</h2>
-             <form onSubmit={handleRegister} className="mb-6">
-               <div className="grid grid-cols-1 gap-4">
-                 <input
-                   type="text"
-                   placeholder="Name"
-                   value={regForm.name}
-                   onChange={(e) => setRegForm({ ...regForm, name: e.target.value })}
-                   className="border rounded-md px-3 py-2"
-                   required
-                 />
-                 <input
-                   type="email"
-                   placeholder="Email"
-                   value={regForm.email}
-                   onChange={(e) => setRegForm({ ...regForm, email: e.target.value })}
-                   className="border rounded-md px-3 py-2"
-                   required
-                 />
-                 <input
-                   type="password"
-                   placeholder="Password"
-                   value={regForm.password}
-                   onChange={(e) => setRegForm({ ...regForm, password: e.target.value })}
-                   className="border rounded-md px-3 py-2"
-                   required
-                 />
-                 <button
-                   type="submit"
-                   className="bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-800 w-full"
-                 >
-                   Register
-                 </button>
-               </div>
-             </form>
-             <p className="text-center text-sm">
-               Sudah punya akun?{' '}
-               <button
-                 onClick={() => setView('login')}
-                 className="font-medium text-blue-600 hover:text-blue-500"
-               >
-                 Login di sini
-               </button>
-             </p>
-           </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // --- MODIFIKASI DIMULAI: Tampilan Halaman Dashboard (Task Management) ---
-  return (
-    <div className="min-h-screen bg-gray-100 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex justify-between items-center mb-12">
-          <h1 className="text-4xl font-bold text-gray-900">
-            Task Management App
-          </h1>
-          <button
-            onClick={handleLogout}
-            className="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600"
-          >
-            Logout
-          </button>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          
-          {/* Kolom Kiri: Teams & Users (REST API) */}
-          <div className="bg-white shadow rounded-lg p-6">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Teams (REST API)</h2>
-            {loading ? (
-              <p>Loading teams...</p>
-            ) : (
-              <div className="space-y-4">
-                {teams.map((team: any) => (
-                  <div key={team.id} className="p-3 border rounded">
-                    <p className="font-semibold text-lg">{team.name}</p>
-                    {/* Menampilkan user yang ada di tim tersebut */}
-                    <div className="mt-2 pl-4">
-                      {users.filter(u => u.teamId === team.id).map((user: any) => (
-                        <div key={user.id} className="text-sm text-gray-600">
-                          <p>{user.name} ({user.email})</p>
-                        </div>
-                      ))}
-                      {users.filter(u => u.teamId === team.id).length === 0 && (
-                        <p className="text-sm text-gray-400">Belum ada anggota.</p>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Kolom Kanan: Tasks (GraphQL) */}
-          <div className="bg-white shadow rounded-lg p-6">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Tasks (GraphQL)</h2>
-            
-            {/* Form Create Task */}
-            <form onSubmit={handleCreateTask} className="mb-6">
-              <div className="grid grid-cols-1 gap-4">
-                <input
-                  type="text"
-                  placeholder="Task Title"
-                  value={newTask.title}
-                  onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
-                  className="border rounded-md px-3 py-2"
-                  required
-                />
-                <textarea
-                  placeholder="Description"
-                  value={newTask.description}
-                  onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
-                  className="border rounded-md px-3 py-2 h-20"
-                />
-                <button
-                  type="submit"
-                  className="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600"
-                >
-                  Add Task
-                </button>
-              </div>
-            </form>
-
-            {/* Daftar Tasks */}
-            {tasksLoading ? (
-              <p>Loading tasks...</p>
-            ) : (
-              <div className="space-y-4">
-                {tasksData?.tasks.map((task: any) => (
-                  <div key={task.id} className="p-4 border rounded">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h3 className="font-semibold text-lg">{task.title}</h3>
-                        <p className="text-gray-600 mt-2">{task.description}</p>
-                      </div>
-                      <select 
-                        value={task.status}
-                        onChange={(e) => handleStatusChange(task.id, e.target.value)}
-                        className={`rounded-md p-1 text-sm font-medium border-2 ${
-                          task.status === 'DONE' ? 'bg-green-100 text-green-800 border-green-200' :
-                          task.status === 'IN_PROGRESS' ? 'bg-yellow-100 text-yellow-800 border-yellow-200' :
-                          'bg-gray-100 text-gray-800 border-gray-200'
-                        }`}
-                      >
-                        <option value="TODO">To Do</option>
-                        <option value="IN_PROGRESS">In Progress</option>
-                        <option value="DONE">Done</option>
-                      </select>
-                    </div>
-                    <div className="flex justify-between items-center mt-3 text-sm text-gray-500">
-                      <span>By: {task.author}</span>
-                      <span>{new Date(task.createdAt).toLocaleDateString()}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+      </div>x
     </div>
   );
-  // --- MODIFIKASI SELESAI ---
 }

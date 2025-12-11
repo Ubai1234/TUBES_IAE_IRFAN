@@ -24,122 +24,164 @@ app.use(cors({
   credentials: true
 }));
 
-// --- MODIFIKASI DIMULAI: Mengganti data dummy ---
-
-// Enum untuk status Task
-const TASK_STATUS = {
-  TODO: 'TODO',
-  IN_PROGRESS: 'IN_PROGRESS',
-  DONE: 'DONE',
+// --- DATA DUMMY KAMAR KOST ---
+const ROOM_STATUS = {
+  TERSEDIA: 'TERSEDIA',
+  DIPESAN: 'DIPESAN', // Status setelah dibooking user
+  TERISI: 'TERISI',   // Status setelah pembayaran dikonfirmasi admin (simulasi)
 };
 
-// Data dummy baru untuk Tasks
-let tasks = [
-  { id: '1', title: 'Selesaikan Backend REST API', description: 'Tambahkan endpoint untuk Teams.', status: TASK_STATUS.DONE, author: 'john@example.com', createdAt: new Date().toISOString() },
-  { id: '2', title: 'Selesaikan Backend GraphQL', description: 'Ubah skema dari Posts menjadi Tasks.', status: TASK_STATUS.IN_PROGRESS, author: 'john@example.com', createdAt: new Date().toISOString() },
-  { id: '3', title: 'Revisi Frontend', description: 'Tampilkan Tasks dan Teams.', status: TASK_STATUS.TODO, author: 'john@example.com', createdAt: new Date().toISOString() }
+// Data awal (Seed Data)
+let rooms = [
+  { 
+    id: '101', 
+    number: 'A-101', 
+    price: 1500000, 
+    facilities: 'AC, WiFi, KM Dalam', 
+    status: ROOM_STATUS.TERSEDIA, 
+    owner: 'admin@example.com' 
+  },
+  { 
+    id: '102', 
+    number: 'B-202', 
+    price: 850000, 
+    facilities: 'Non-AC, WiFi, KM Luar', 
+    status: ROOM_STATUS.TERISI, 
+    owner: 'admin@example.com' 
+  }
 ];
 
-// --- MODIFIKASI SELESAI ---
-
-// --- MODIFIKASI DIMULAI: Mengganti Type Defs (Skema GraphQL) ---
+// --- TYPE DEFINITIONS (SCHEMA) ---
 const typeDefs = `
-  enum TaskStatus {
-    TODO
-    IN_PROGRESS
-    DONE
+  enum RoomStatus {
+    TERSEDIA
+    DIPESAN
+    TERISI
   }
 
-  type Task {
+  type Room {
     id: ID!
-    title: String!
-    description: String
-    status: TaskStatus!
-    author: String!
-    createdAt: String!
+    number: String!
+    price: Int!
+    facilities: String
+    status: RoomStatus!
+    owner: String
   }
 
   type Query {
-    tasks: [Task!]!
-    task(id: ID!): Task
+    # Semua orang bisa melihat daftar kamar
+    rooms: [Room!]!
+    # Detail satu kamar
+    room(id: ID!): Room
   }
 
   type Mutation {
-    createTask(title: String!, description: String): Task!
-    updateTaskStatus(id: ID!, status: TaskStatus!): Task!
-    deleteTask(id: ID!): Boolean!
+    # --- FITUR KHUSUS ADMIN ---
+    createRoom(number: String!, price: Int!, facilities: String): Room!
+    updateRoomStatus(id: ID!, status: RoomStatus!): Room!
+    deleteRoom(id: ID!): Boolean!
+    
+    # --- FITUR KHUSUS ANAK KOST ---
+    bookRoom(id: ID!): Room! 
   }
 
   type Subscription {
-    taskAdded: Task!
-    taskUpdated: Task!
-    taskDeleted: ID!
+    roomUpdated: Room!
+    roomDeleted: ID!
   }
 `;
-// --- MODIFIKASI SELESAI ---
 
-
-// --- MODIFIKASI DIMULAI: Mengganti Resolvers ---
+// --- RESOLVERS ---
 const resolvers = {
   Query: {
-    tasks: () => tasks,
-    task: (_, { id }) => tasks.find(task => task.id === id),
+    rooms: () => rooms,
+    task: (_, { id }) => rooms.find(r => r.id === id), // Alias untuk kompatibilitas jika ada query lama
+    room: (_, { id }) => rooms.find(r => r.id === id),
   },
   Mutation: {
-    createTask: (_, { title, description }, context) => {
-      // Logic autentikasi dari JWT tetap sama
-      if (!context.user || !context.user.email) {
-        throw new Error('Not authenticated or user email not found in token');
+    // 1. Tambah Kamar (Hanya Admin)
+    createRoom: (_, { number, price, facilities }, context) => {
+      // Cek apakah user login DAN role-nya admin
+      if (!context.user || context.user.role !== 'admin') {
+        throw new Error('Akses Ditolak: Hanya Admin yang bisa menambah kamar.');
       }
-      
-      const newTask = {
+
+      const newRoom = {
         id: uuidv4(),
-        title,
-        description: description || '',
-        status: TASK_STATUS.TODO, // Status default
-        author: context.user.email, // Ambil author dari context (JWT)
-        createdAt: new Date().toISOString(),
+        number,
+        price,
+        facilities: facilities || '',
+        status: ROOM_STATUS.TERSEDIA,
+        owner: context.user.email,
       };
       
-      tasks.push(newTask);
-      pubsub.publish('TASK_ADDED', { taskAdded: newTask });
-      return newTask;
+      rooms.push(newRoom);
+      pubsub.publish('ROOM_UPDATED', { roomUpdated: newRoom });
+      return newRoom;
     },
     
-    updateTaskStatus: (_, { id, status }) => {
-      const taskIndex = tasks.findIndex(task => task.id === id);
-      if (taskIndex === -1) throw new Error('Task not found');
-      
-      // Pastikan status valid
-      if (!Object.values(TASK_STATUS).includes(status)) {
-        throw new Error('Invalid status');
+    // 2. Booking Kamar (Khusus Anak Kost)
+    bookRoom: (_, { id }, context) => {
+      if (!context.user) {
+        throw new Error('Silakan login terlebih dahulu untuk memesan kamar.');
       }
-        
-      tasks[taskIndex].status = status;
-      const updatedTask = tasks[taskIndex];
+
+      const roomIndex = rooms.findIndex(r => r.id === id);
+      if (roomIndex === -1) throw new Error('Kamar tidak ditemukan.');
       
-      pubsub.publish('TASK_UPDATED', { taskUpdated: updatedTask });
-      return updatedTask;
+      const currentRoom = rooms[roomIndex];
+      
+      // Validasi: Hanya kamar 'TERSEDIA' yang bisa dibooking
+      if (currentRoom.status !== ROOM_STATUS.TERSEDIA) {
+        throw new Error('Maaf, kamar ini sudah tidak tersedia.');
+      }
+
+      // Ubah status jadi DIPESAN
+      const updatedRoom = { ...currentRoom, status: ROOM_STATUS.DIPESAN };
+      rooms[roomIndex] = updatedRoom;
+
+      // Notifikasi real-time ke semua client
+      pubsub.publish('ROOM_UPDATED', { roomUpdated: updatedRoom });
+      return updatedRoom;
+    },
+
+    // 3. Update Status Manual (Hanya Admin)
+    updateRoomStatus: (_, { id, status }, context) => {
+      if (!context.user || context.user.role !== 'admin') {
+        throw new Error('Akses Ditolak: Hanya Admin yang bisa mengubah status.');
+      }
+
+      const roomIndex = rooms.findIndex(r => r.id === id);
+      if (roomIndex === -1) throw new Error('Kamar tidak ditemukan.');
+      
+      rooms[roomIndex].status = status;
+      const updatedRoom = rooms[roomIndex];
+      
+      pubsub.publish('ROOM_UPDATED', { roomUpdated: updatedRoom });
+      return updatedRoom;
     },
     
-    deleteTask: (_, { id }) => {
-      const taskIndex = tasks.findIndex(task => task.id === id);
-      if (taskIndex === -1) return false;
+    // 4. Hapus Kamar (Hanya Admin)
+    deleteRoom: (_, { id }, context) => {
+      if (!context.user || context.user.role !== 'admin') {
+        throw new Error('Akses Ditolak: Hanya Admin yang bisa menghapus kamar.');
+      }
+
+      const roomIndex = rooms.findIndex(r => r.id === id);
+      if (roomIndex === -1) return false;
       
-      tasks.splice(taskIndex, 1);
-      pubsub.publish('TASK_DELETED', { taskDeleted: id });
+      rooms.splice(roomIndex, 1);
+      pubsub.publish('ROOM_DELETED', { roomDeleted: id });
       return true;
     },
   },
   Subscription: {
-    taskAdded: { subscribe: () => pubsub.asyncIterator(['TASK_ADDED']) },
-    taskUpdated: { subscribe: () => pubsub.asyncIterator(['TASK_UPDATED']) },
-    taskDeleted: { subscribe: () => pubsub.asyncIterator(['TASK_DELETED']) },
+    roomUpdated: { subscribe: () => pubsub.asyncIterator(['ROOM_UPDATED']) },
+    roomDeleted: { subscribe: () => pubsub.asyncIterator(['ROOM_DELETED']) },
   },
 };
-// --- MODIFIKASI SELESAI ---
 
-// Kode startup server (tetap sama)
+// --- SERVER SETUP (Tidak Berubah) ---
 const schema = makeExecutableSchema({ typeDefs, resolvers });
 
 async function startServer() {
@@ -160,6 +202,7 @@ async function startServer() {
   const server = new ApolloServer({
     schema,
     context: ({ req }) => {
+      // Ambil payload user yang dikirim dari API Gateway
       const userPayload = req.headers['x-user-payload'];
       let user = null;
       if (userPayload) {
@@ -191,7 +234,7 @@ async function startServer() {
   const PORT = process.env.PORT || 4000;
   
   httpServer.listen(PORT, () => {
-    console.log(`🚀 GraphQL API Server running on port ${PORT}`);
+    console.log(`🚀 GraphQL Room Service running on port ${PORT}`);
     console.log(`🛰  GraphQL endpoint: http://localhost:${PORT}${server.graphqlPath}`);
     console.log(`🌊 Subscriptions ready at ws://localhost:${PORT}${server.graphqlPath}`);
   });
@@ -201,10 +244,10 @@ async function startServer() {
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'healthy',
-    service: 'graphql-api',
+    service: 'graphql-api (Room Service)',
     timestamp: new Date().toISOString(),
     data: {
-      tasks: tasks.length, // Diubah dari posts
+      totalRooms: rooms.length,
     }
   });
 });
