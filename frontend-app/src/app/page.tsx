@@ -4,6 +4,10 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { gql, useQuery, useMutation } from '@apollo/client';
 
+// --- DATA LIST ---
+const MONTHS = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+const YEARS = ['2025', '2026', '2027'];
+
 // --- GRAPHQL QUERIES ---
 const GET_DATA = gql`
   query GetData($email: String!) {
@@ -25,14 +29,25 @@ const PAY_BILL = gql` mutation PayBill($id: ID!, $proof: String!) { uploadPaymen
 const ADMIN_CONFIRM_PAY = gql` mutation ConfirmPay($id: ID!) { confirmPayment(id: $id) { id } } `;
 const ADMIN_UPDATE_COMPLAINT = gql` mutation UpdateComplaint($id: ID!, $status: String!) { updateComplaintStatus(id: $id, status: $status) { id } } `;
 
+// Mutation baru untuk Admin Buat Tagihan
+const CREATE_BILL = gql` 
+  mutation CreateBill($room: String!, $month: String!, $year: String!, $amount: Int!) { 
+    createBill(roomNumber: $room, month: $month, year: $year, amount: $amount) { id } 
+  } 
+`;
+
 export default function Dashboard() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState('home'); 
   
+  // State User
   const [desc, setDesc] = useState('');
   const [proof, setProof] = useState('');
+
+  // State Admin
   const [newRoom, setNewRoom] = useState({ number: '', price: '', facilities: '' });
+  const [billData, setBillData] = useState({ room: '', month: 'Januari', year: '2025', amount: '' });
 
   useEffect(() => {
     const u = localStorage.getItem('user');
@@ -49,6 +64,7 @@ export default function Dashboard() {
     skip: !user 
   });
 
+  // Hooks Mutation
   const [bookRoom] = useMutation(BOOK_ROOM, { onCompleted: () => { alert('Berhasil Booking!'); refetch(); } });
   const [createComplaint] = useMutation(CREATE_COMPLAINT, { onCompleted: () => { alert('Laporan Terkirim'); setDesc(''); refetch(); } });
   const [payBill] = useMutation(PAY_BILL, { onCompleted: () => { alert('Bukti Terupload'); setProof(''); refetch(); } });
@@ -58,13 +74,19 @@ export default function Dashboard() {
   const [deleteRoom] = useMutation(DELETE_ROOM, { onCompleted: () => { alert('Kamar Berhasil Dihapus'); refetch(); } });
   const [confirmPay] = useMutation(ADMIN_CONFIRM_PAY, { onCompleted: () => refetch() });
   const [updateComplaint] = useMutation(ADMIN_UPDATE_COMPLAINT, { onCompleted: () => refetch() });
+  
+  // Hook Admin Create Bill
+  const [createBill] = useMutation(CREATE_BILL, { 
+    onCompleted: () => { alert('Tagihan berhasil dibuat!'); refetch(); },
+    onError: (err) => alert(err.message)
+  });
 
   if (!user) return <div className="min-h-screen flex items-center justify-center text-white font-bold text-xl">Memuat...</div>;
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row font-sans">
       
-      {/* SIDEBAR: Putih dengan Header Biru */}
+      {/* SIDEBAR */}
       <aside className="w-full md:w-64 bg-white/90 backdrop-blur-md shadow-xl h-screen sticky top-0 flex flex-col z-10 border-r border-white/50">
         <div className="p-6 border-b border-blue-50 bg-gradient-to-r from-blue-600 to-blue-500 text-white">
           <h1 className="text-2xl font-bold tracking-tight">Kost Apps</h1>
@@ -84,7 +106,7 @@ export default function Dashboard() {
           {user.role === 'admin' && (
             <>
               <NavBtn label="🏨 Manajemen Kamar" active={activeTab==='home'} onClick={()=>setActiveTab('home')} />
-              <NavBtn label="💰 Keuangan" active={activeTab==='admin_finance'} onClick={()=>setActiveTab('admin_finance')} />
+              <NavBtn label="💰 Keuangan & Tagihan" active={activeTab==='admin_finance'} onClick={()=>setActiveTab('admin_finance')} />
               <NavBtn label="🛠️ Komplain Masuk" active={activeTab==='admin_complaints'} onClick={()=>setActiveTab('admin_complaints')} />
             </>
           )}
@@ -155,10 +177,11 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* === USER: TAGIHAN === */}
+        {/* === USER: TAGIHAN (USER HANYA BISA LIHAT DAN BAYAR) === */}
         {user.role === 'user' && activeTab === 'billing' && (
           <div>
             <h2 className="text-3xl font-bold mb-6 text-white drop-shadow-md">Riwayat Tagihan</h2>
+            
             <div className="space-y-4 max-w-4xl">
               {data?.myPayments.map((p:any) => (
                 <div key={p.id} className="bg-white p-6 rounded-2xl shadow-md flex flex-col md:flex-row justify-between items-center hover:shadow-lg transition border border-white/60">
@@ -186,7 +209,7 @@ export default function Dashboard() {
                   </div>
                 </div>
               ))}
-              {data?.myPayments.length === 0 && <p className="text-white opacity-90 font-medium">Belum ada tagihan.</p>}
+              {data?.myPayments.length === 0 && <p className="text-white opacity-90 font-medium">Belum ada tagihan masuk.</p>}
             </div>
           </div>
         )}
@@ -278,10 +301,84 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* === ADMIN: KEUANGAN === */}
+        {/* === ADMIN: KEUANGAN (DENGAN FITUR BUAT TAGIHAN) === */}
         {user.role === 'admin' && activeTab === 'admin_finance' && (
           <div>
-             <h2 className="text-3xl font-bold mb-6 text-white drop-shadow-md">Verifikasi Pembayaran</h2>
+             <h2 className="text-3xl font-bold mb-6 text-white drop-shadow-md">Keuangan & Tagihan</h2>
+             
+             {/* --- ADMIN BUAT TAGIHAN BARU --- */}
+             <div className="bg-white p-6 rounded-2xl shadow-lg mb-8 max-w-4xl border border-white/60">
+                <h3 className="font-bold mb-4 text-gray-800 text-lg border-b pb-2">➕ Buat Tagihan Bulanan</h3>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                    {/* Input Kamar */}
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 mb-1">Nomor Kamar</label>
+                        <select 
+                            className="w-full border p-3 rounded-lg bg-gray-50 focus:ring-2 focus:ring-brand-blue outline-none"
+                            value={billData.room}
+                            onChange={(e) => {
+                                const r = data?.rooms.find((rm:any) => rm.number === e.target.value);
+                                setBillData({ ...billData, room: e.target.value, amount: r ? r.price : '' });
+                            }}
+                        >
+                            <option value="">-- Pilih Kamar --</option>
+                            {data?.rooms.filter((r:any) => r.status === 'TERISI').map((r:any) => (
+                                <option key={r.id} value={r.number}>{r.number} (Penghuni: {r.tenantEmail})</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Dropdown Bulan */}
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 mb-1">Bulan Tagihan</label>
+                        <select 
+                            className="w-full border p-3 rounded-lg bg-gray-50 focus:ring-2 focus:ring-brand-blue outline-none"
+                            value={billData.month}
+                            onChange={(e) => setBillData({ ...billData, month: e.target.value })}
+                        >
+                            {MONTHS.map(m => <option key={m} value={m}>{m}</option>)}
+                        </select>
+                    </div>
+
+                    {/* Dropdown Tahun */}
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 mb-1">Tahun</label>
+                        <select 
+                            className="w-full border p-3 rounded-lg bg-gray-50 focus:ring-2 focus:ring-brand-blue outline-none"
+                            value={billData.year}
+                            onChange={(e) => setBillData({ ...billData, year: e.target.value })}
+                        >
+                            {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
+                        </select>
+                    </div>
+
+                    {/* Input Jumlah & Tombol */}
+                    <div>
+                         <label className="block text-xs font-bold text-gray-500 mb-1">Nominal (Rp)</label>
+                         <div className="flex gap-2">
+                             <input 
+                                type="number" 
+                                className="w-full border p-3 rounded-lg bg-gray-100" 
+                                value={billData.amount} 
+                                readOnly // Readonly agar sesuai harga kamar, hapus readOnly jika ingin bisa diedit manual
+                             />
+                             <button 
+                                onClick={() => createBill({
+                                    variables: { room: billData.room, month: billData.month, year: billData.year, amount: parseInt(billData.amount) },
+                                    context: {headers:{'x-user-payload':JSON.stringify(user)}}
+                                })}
+                                disabled={!billData.room || !billData.amount}
+                                className="bg-brand-blue text-white px-4 py-2 rounded-lg font-bold hover:bg-brand-dark shadow-md disabled:bg-gray-300 transition-all"
+                             >
+                                Buat
+                             </button>
+                         </div>
+                    </div>
+                </div>
+                <p className="text-xs text-gray-400 mt-2">*Tagihan hanya bisa dibuat untuk kamar yang berstatus TERISI.</p>
+             </div>
+
+             {/* --- LIST TAGIHAN --- */}
              <div className="grid gap-4 max-w-4xl">
                {data?.payments.map((p:any) => (
                  <div key={p.id} className="bg-white p-5 rounded-2xl shadow-md flex justify-between items-center hover:shadow-lg transition">

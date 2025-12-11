@@ -15,7 +15,6 @@ module.exports = {
       backgroundImage: {
         // Gradasi biru ke putih
         'ocean-gradient': 'linear-gradient(180deg, #3B82F6 0%, #FFFFFF 100%)',
-        'card-gradient': 'linear-gradient(135deg, #FFFFFF 60%, #EFF6FF 100%)',
       }
     },
   },

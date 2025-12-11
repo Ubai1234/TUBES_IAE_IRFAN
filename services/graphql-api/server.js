@@ -25,10 +25,10 @@ let rooms = [
   { id: '201', number: 'B-201', price: 2000000, facilities: 'AC, TV, Water Heater', status: ROOM_STATUS.TERISI, tenantEmail: 'user@kost.com' }
 ];
 
-let complaints = []; // Menyimpan laporan kerusakan
-let payments = [];   // Menyimpan riwayat tagihan & bukti bayar
+let complaints = []; 
+let payments = [];   
 
-// Seed Data Pembayaran Dummy
+// Seed Data
 payments.push({
   id: 'pay-1',
   userEmail: 'user@kost.com',
@@ -39,7 +39,7 @@ payments.push({
   proofImage: null
 });
 
-// --- SCHEMA (Type Definitions) ---
+// --- SCHEMA ---
 const typeDefs = `
   type Room {
     id: ID!
@@ -86,8 +86,11 @@ const typeDefs = `
     updateComplaintStatus(id: ID!, status: String!): Complaint!
     confirmPayment(id: ID!): Payment!
     kickUser(email: String!): Boolean
+    
+    # NEW: Admin Create Bill
+    createBill(roomNumber: String!, month: String!, year: String!, amount: Int!): Payment!
 
-    # --- FITUR USER (ANAK KOST) ---
+    # --- FITUR USER ---
     bookRoom(id: ID!): Room!
     createComplaint(description: String!, roomNumber: String!): Complaint!
     uploadPaymentProof(id: ID!, proofImage: String!): Payment!
@@ -103,17 +106,13 @@ const resolvers = {
   Query: {
     rooms: () => rooms,
     myRoom: (_, { email }) => rooms.find(r => r.tenantEmail === email),
-    
-    // Complaint logic
     complaints: () => complaints,
     myComplaints: (_, { email }) => complaints.filter(c => c.userEmail === email),
-
-    // Payment logic
     payments: () => payments,
     myPayments: (_, { email }) => payments.filter(p => p.userEmail === email),
   },
   Mutation: {
-    // --- ADMIN MUTATIONS ---
+    // --- ADMIN ---
     createRoom: (_, args) => {
       const newRoom = { id: uuidv4(), ...args, status: ROOM_STATUS.TERSEDIA, tenantEmail: null };
       rooms.push(newRoom);
@@ -124,7 +123,7 @@ const resolvers = {
       const idx = rooms.findIndex(r => r.id === id);
       if (idx === -1) throw new Error('Room not found');
       rooms[idx].status = status;
-      if (status === ROOM_STATUS.TERSEDIA) rooms[idx].tenantEmail = null; // Reset penghuni jika tersedia
+      if (status === ROOM_STATUS.TERSEDIA) rooms[idx].tenantEmail = null; 
       pubsub.publish('ROOM_UPDATED', { roomUpdated: rooms[idx] });
       return rooms[idx];
     },
@@ -146,33 +145,48 @@ const resolvers = {
       payments[idx].status = PAYMENT_STATUS.LUNAS;
       return payments[idx];
     },
-    kickUser: (_, { email }) => {
-      const idx = rooms.findIndex(r => r.tenantEmail === email);
-      if (idx !== -1) {
-        rooms[idx].tenantEmail = null;
-        rooms[idx].status = ROOM_STATUS.TERSEDIA;
-        pubsub.publish('ROOM_UPDATED', { roomUpdated: rooms[idx] });
-        return true;
-      }
-      return false;
+    // NEW: Admin membuat tagihan
+    createBill: (_, { roomNumber, month, year, amount }, context) => {
+      // Validasi Admin (Sederhana via context/frontend logic yg dikirim)
+      // Di real app, cek context.user.role === 'admin'
+
+      // Cari kamar untuk mendapatkan email penghuni
+      const room = rooms.find(r => r.number === roomNumber);
+      if (!room) throw new Error('Kamar tidak ditemukan');
+      if (!room.tenantEmail) throw new Error('Kamar ini kosong (tidak ada penyewa)');
+
+      const fullMonth = `${month} ${year}`; // Format: "Januari 2025"
+
+      const newPayment = {
+        id: uuidv4(),
+        userEmail: room.tenantEmail,
+        roomNumber: roomNumber,
+        amount: amount,
+        month: fullMonth,
+        status: PAYMENT_STATUS.MENUNGGU,
+        proofImage: null
+      };
+      
+      payments.push(newPayment);
+      return newPayment;
     },
 
-    // --- USER MUTATIONS ---
+    // --- USER ---
     bookRoom: (_, { id }, context) => {
       if (!context.user) throw new Error('Unauthorized');
       const idx = rooms.findIndex(r => r.id === id);
       if (rooms[idx].status !== ROOM_STATUS.TERSEDIA) throw new Error('Room not available');
       
-      rooms[idx].status = ROOM_STATUS.DIPESAN; // Menunggu konfirmasi admin sebenarnya, tapi kita anggap langsung book
+      rooms[idx].status = ROOM_STATUS.DIPESAN; 
       rooms[idx].tenantEmail = context.user.email;
       
-      // Generate tagihan pertama otomatis
+      // Tagihan otomatis bulan pertama
       payments.push({
         id: uuidv4(),
         userEmail: context.user.email,
         roomNumber: rooms[idx].number,
         amount: rooms[idx].price,
-        month: 'Bulan Pertama',
+        month: 'Deposit Awal (Bulan 1)',
         status: PAYMENT_STATUS.MENUNGGU,
         proofImage: null
       });
@@ -196,7 +210,7 @@ const resolvers = {
     uploadPaymentProof: (_, { id, proofImage }) => {
       const idx = payments.findIndex(p => p.id === id);
       if (idx === -1) throw new Error('Payment not found');
-      payments[idx].proofImage = proofImage; // Di real app, ini URL dari S3/Cloudinary
+      payments[idx].proofImage = proofImage; 
       return payments[idx];
     }
   },
