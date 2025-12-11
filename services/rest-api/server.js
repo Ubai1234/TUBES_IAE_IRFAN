@@ -1,17 +1,14 @@
 const crypto = require('crypto');
 
-// Generate RSA key pair
-// Di produksi, ini harus dimuat dari file/env, bukan dibuat setiap kali server start.
+// Generate RSA key pair (Opsional/Placeholder jika ingin pakai RSA nanti)
 const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', {
   modulusLength: 2048,
   publicKeyEncoding: { type: 'spki', format: 'pem' },
   privateKeyEncoding: { type: 'pkcs8', format: 'pem' }
 });
 
-// Simpan key untuk digunakan di modul lain (simplifikasi)
 process.env.JWT_PRIVATE_KEY = privateKey;
 process.env.JWT_PUBLIC_KEY = publicKey;
-
 
 const express = require('express');
 const cors = require('cors');
@@ -29,8 +26,8 @@ app.use(cors());
 
 // Rate limiting
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100 // limit each IP to 100 requests per windowMs
+  windowMs: 15 * 60 * 1000, 
+  max: 100 
 });
 app.use(limiter);
 
@@ -47,8 +44,11 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Routes
-app.use('/api/users', userRoutes);
+// --- PERBAIKAN DI SINI ---
+// Sebelumnya: app.use('/api/users', userRoutes);
+// Sekarang: app.use('/users', userRoutes);
+// Alasan: Gateway meneruskan request ke /users/..., jadi service harus mendengarkan di /users
+app.use('/users', userRoutes);
 
 // Error handling middleware
 app.use(errorHandler);
