@@ -20,6 +20,7 @@ const GET_DATA = gql`
 const BOOK_ROOM = gql` mutation BookRoom($id: ID!) { bookRoom(id: $id) { id, status } } `;
 const CREATE_ROOM = gql` mutation CreateRoom($number: String!, $price: Int!, $facilities: String) { createRoom(number: $number, price: $price, facilities: $facilities) { id } } `;
 const UPDATE_ROOM = gql` mutation UpdateRoom($id: ID!, $status: String!) { updateRoomStatus(id: $id, status: $status) { id } } `;
+const DELETE_ROOM = gql` mutation DeleteRoom($id: ID!) { deleteRoom(id: $id) } `; // <-- FITUR BARU
 const CREATE_COMPLAINT = gql` mutation CreateComplaint($desc: String!, $room: String!) { createComplaint(description: $desc, roomNumber: $room) { id } } `;
 const PAY_BILL = gql` mutation PayBill($id: ID!, $proof: String!) { uploadPaymentProof(id: $id, proofImage: $proof) { id } } `;
 const ADMIN_CONFIRM_PAY = gql` mutation ConfirmPay($id: ID!) { confirmPayment(id: $id) { id } } `;
@@ -60,6 +61,7 @@ export default function Dashboard() {
   // Admin Actions
   const [createRoom] = useMutation(CREATE_ROOM, { onCompleted: () => { alert('Kamar Dibuat'); setNewRoom({number:'', price:'', facilities:''}); refetch(); } });
   const [updateRoom] = useMutation(UPDATE_ROOM, { onCompleted: () => refetch() });
+  const [deleteRoom] = useMutation(DELETE_ROOM, { onCompleted: () => { alert('Kamar Berhasil Dihapus'); refetch(); } }); // <-- FITUR BARU
   const [confirmPay] = useMutation(ADMIN_CONFIRM_PAY, { onCompleted: () => refetch() });
   const [updateComplaint] = useMutation(ADMIN_UPDATE_COMPLAINT, { onCompleted: () => refetch() });
 
@@ -239,10 +241,19 @@ export default function Dashboard() {
                       <td className="p-4 font-bold">{r.number}</td>
                       <td className="p-4 text-gray-500">{r.tenantEmail || '-'}</td>
                       <td className="p-4"><Badge status={r.status} /></td>
-                      <td className="p-4">
+                      <td className="p-4 flex items-center gap-2">
+                        {/* Tombol Status */}
                         {r.status === 'TERSEDIA' && <button onClick={()=>updateRoom({variables:{id:r.id, status:'RENOVASI'}, context:{headers:{'x-user-payload':JSON.stringify(user)}}})} className="text-xs bg-orange-100 text-orange-600 px-3 py-1 rounded font-bold hover:bg-orange-200">Set Renovasi</button>}
                         {r.status === 'RENOVASI' && <button onClick={()=>updateRoom({variables:{id:r.id, status:'TERSEDIA'}, context:{headers:{'x-user-payload':JSON.stringify(user)}}})} className="text-xs bg-green-100 text-green-600 px-3 py-1 rounded font-bold hover:bg-green-200">Set Tersedia</button>}
                         {r.status === 'DIPESAN' && <button onClick={()=>updateRoom({variables:{id:r.id, status:'TERISI'}, context:{headers:{'x-user-payload':JSON.stringify(user)}}})} className="text-xs bg-blue-100 text-blue-600 px-3 py-1 rounded font-bold hover:bg-blue-200">Terima Penghuni</button>}
+                        
+                        {/* FITUR BARU: TOMBOL HAPUS */}
+                        <button 
+                          onClick={() => { if(confirm('⚠️ PERINGATAN: Hapus kamar ini permanen?')) deleteRoom({variables:{id:r.id}, context:{headers:{'x-user-payload':JSON.stringify(user)}}}) }} 
+                          className="text-xs bg-red-100 text-red-600 px-3 py-1 rounded font-bold hover:bg-red-200 ml-2"
+                        >
+                          Hapus
+                        </button>
                       </td>
                     </tr>
                   ))}
