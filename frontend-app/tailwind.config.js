@@ -7,11 +7,16 @@ module.exports = {
   ],
   theme: {
     extend: {
-      backgroundImage: {
-        'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
-        'gradient-conic':
-          'conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))',
+      colors: {
+        'brand-blue': '#2563EB', // Biru utama (Royal Blue)
+        'brand-dark': '#1E40AF', // Biru lebih gelap
+        'brand-light': '#EFF6FF', // Biru sangat muda (hampir putih)
       },
+      backgroundImage: {
+        // Gradasi biru ke putih
+        'ocean-gradient': 'linear-gradient(180deg, #3B82F6 0%, #FFFFFF 100%)',
+        'card-gradient': 'linear-gradient(135deg, #FFFFFF 60%, #EFF6FF 100%)',
+      }
     },
   },
   plugins: [],

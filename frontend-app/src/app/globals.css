@@ -1,3 +1,10 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+body {
+  /* Background Global: Gradasi Biru ke Putih */
+  background: linear-gradient(to bottom right, #60A5FA, #F0F9FF, #FFFFFF);
+  min-height: 100vh;
+  color: #1F2937; /* Text Gray-800 */
+}
