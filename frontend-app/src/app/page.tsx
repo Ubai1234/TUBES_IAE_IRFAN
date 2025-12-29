@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { gql, useQuery, useMutation } from '@apollo/client';
+import Image from 'next/image'; // [UPDATE] Import komponen Image
 
 // --- DATA LIST ---
 const MONTHS = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
@@ -11,8 +12,9 @@ const YEARS = ['2025', '2026', '2027'];
 // --- GRAPHQL QUERIES ---
 const GET_DATA = gql`
   query GetData($email: String!) {
-    rooms { id, number, price, facilities, status, tenantEmail }
-    myRoom(email: $email) { id, number, price, facilities }
+    # [UPDATE] Tambahkan field image
+    rooms { id, number, price, facilities, status, tenantEmail, image }
+    myRoom(email: $email) { id, number, price, facilities, image }
     myPayments(email: $email) { id, month, amount, status, proofImage }
     myComplaints(email: $email) { id, description, status, date }
     complaints { id, userEmail, roomNumber, description, status, date }
@@ -29,7 +31,6 @@ const PAY_BILL = gql` mutation PayBill($id: ID!, $proof: String!) { uploadPaymen
 const ADMIN_CONFIRM_PAY = gql` mutation ConfirmPay($id: ID!) { confirmPayment(id: $id) { id } } `;
 const ADMIN_UPDATE_COMPLAINT = gql` mutation UpdateComplaint($id: ID!, $status: String!) { updateComplaintStatus(id: $id, status: $status) { id } } `;
 
-// Mutation baru untuk Admin Buat Tagihan
 const CREATE_BILL = gql` 
   mutation CreateBill($room: String!, $month: String!, $year: String!, $amount: Int!) { 
     createBill(roomNumber: $room, month: $month, year: $year, amount: $amount) { id } 
@@ -64,7 +65,6 @@ export default function Dashboard() {
     skip: !user 
   });
 
-  // Hooks Mutation
   const [bookRoom] = useMutation(BOOK_ROOM, { onCompleted: () => { alert('Berhasil Booking!'); refetch(); } });
   const [createComplaint] = useMutation(CREATE_COMPLAINT, { onCompleted: () => { alert('Laporan Terkirim'); setDesc(''); refetch(); } });
   const [payBill] = useMutation(PAY_BILL, { onCompleted: () => { alert('Bukti Terupload'); setProof(''); refetch(); } });
@@ -75,7 +75,6 @@ export default function Dashboard() {
   const [confirmPay] = useMutation(ADMIN_CONFIRM_PAY, { onCompleted: () => refetch() });
   const [updateComplaint] = useMutation(ADMIN_UPDATE_COMPLAINT, { onCompleted: () => refetch() });
   
-  // Hook Admin Create Bill
   const [createBill] = useMutation(CREATE_BILL, { 
     onCompleted: () => { alert('Tagihan berhasil dibuat!'); refetch(); },
     onError: (err) => alert(err.message)
@@ -126,10 +125,23 @@ export default function Dashboard() {
             <h2 className="text-3xl font-bold mb-6 text-white drop-shadow-md">Katalog Kamar</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {data?.rooms.map((r:any) => (
-                <div key={r.id} className="bg-white p-6 rounded-2xl shadow-lg hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border border-white/50">
-                  <div className="flex justify-between items-center mb-3">
+                <div key={r.id} className="bg-white p-4 rounded-2xl shadow-lg hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border border-white/50 overflow-hidden">
+                  
+                  {/* [UPDATE] Tampilkan Gambar */}
+                  <div className="relative w-full h-48 mb-4 rounded-xl overflow-hidden">
+                    <Image 
+                      src={r.image || 'https://images.unsplash.com/photo-1596394516093-501ba68a0ba6'} 
+                      alt={`Kamar ${r.number}`} 
+                      fill 
+                      className="object-cover"
+                    />
+                    <div className="absolute top-2 right-2">
+                        <Badge status={r.status} />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-between items-center mb-2 px-1">
                     <h3 className="text-xl font-bold text-gray-800">{r.number}</h3>
-                    <Badge status={r.status} />
                   </div>
                   <div className="mb-4 bg-brand-light p-3 rounded-xl">
                     <p className="text-brand-blue font-extrabold text-2xl">Rp {r.price.toLocaleString()}</p>
@@ -159,13 +171,26 @@ export default function Dashboard() {
           <div>
             <h2 className="text-3xl font-bold mb-6 text-white drop-shadow-md">Kamar Saya</h2>
             {data?.myRoom ? (
-              <div className="bg-white p-8 rounded-2xl shadow-xl border-l-8 border-brand-blue max-w-2xl">
-                <h3 className="text-4xl font-bold text-gray-800 mb-2">Kamar {data.myRoom.number}</h3>
-                <div className="w-full h-px bg-gray-200 my-4"></div>
-                <p className="text-lg text-gray-600 mb-6">Fasilitas: <span className="font-semibold text-brand-blue">{data.myRoom.facilities}</span></p>
-                <div className="bg-brand-light p-6 rounded-xl text-brand-dark flex justify-between items-center border border-blue-100">
-                  <span>Biaya Sewa</span>
-                  <span className="font-bold text-xl">Rp {data.myRoom.price.toLocaleString()}<span className="text-sm font-normal">/bulan</span></span>
+              <div className="bg-white p-0 rounded-2xl shadow-xl border-l-8 border-brand-blue max-w-2xl overflow-hidden">
+                {/* [UPDATE] Tampilkan Gambar di Kamar Saya */}
+                <div className="relative w-full h-64">
+                    <Image 
+                      src={data.myRoom.image || 'https://images.unsplash.com/photo-1596394516093-501ba68a0ba6'} 
+                      alt={`Kamar ${data.myRoom.number}`} 
+                      fill 
+                      className="object-cover"
+                    />
+                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-6">
+                        <h3 className="text-4xl font-bold text-white mb-1">Kamar {data.myRoom.number}</h3>
+                    </div>
+                </div>
+
+                <div className="p-8">
+                    <p className="text-lg text-gray-600 mb-6">Fasilitas: <span className="font-semibold text-brand-blue">{data.myRoom.facilities}</span></p>
+                    <div className="bg-brand-light p-6 rounded-xl text-brand-dark flex justify-between items-center border border-blue-100">
+                    <span>Biaya Sewa</span>
+                    <span className="font-bold text-xl">Rp {data.myRoom.price.toLocaleString()}<span className="text-sm font-normal">/bulan</span></span>
+                    </div>
                 </div>
               </div>
             ) : (

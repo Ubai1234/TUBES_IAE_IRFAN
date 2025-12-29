@@ -19,10 +19,36 @@ const ROOM_STATUS = { TERSEDIA: 'TERSEDIA', DIPESAN: 'DIPESAN', TERISI: 'TERISI'
 const COMPLAINT_STATUS = { DITERIMA: 'DITERIMA', DIPROSES: 'DIPROSES', SELESAI: 'SELESAI' };
 const PAYMENT_STATUS = { MENUNGGU: 'MENUNGGU', LUNAS: 'LUNAS' };
 
+// [UPDATE FINAL] Data awal sudah dilengkapi dengan gambar manual
 let rooms = [
-  { id: '101', number: 'A-101', price: 1500000, facilities: 'AC, KM Dalam', status: ROOM_STATUS.TERSEDIA },
-  { id: '102', number: 'A-102', price: 850000, facilities: 'Non-AC, KM Luar', status: ROOM_STATUS.TERSEDIA },
-  { id: '201', number: 'B-201', price: 2000000, facilities: 'AC, TV, Water Heater', status: ROOM_STATUS.TERISI, tenantEmail: 'user@kost.com' }
+  { 
+    id: '101', 
+    number: 'A-101', 
+    price: 1500000, 
+    facilities: 'AC, KM Dalam', 
+    status: ROOM_STATUS.TERSEDIA,
+    // Gambar Manual 1
+    image: 'https://images.unsplash.com/photo-1631049307264-da0ec9d70304?auto=format&fit=crop&w=800&q=80' 
+  },
+  { 
+    id: '102', 
+    number: 'A-102', 
+    price: 850000, 
+    facilities: 'Non-AC, KM Luar', 
+    status: ROOM_STATUS.TERSEDIA,
+    // Gambar Manual 2 (Agar A-102 tidak kosong)
+    image: 'https://images.unsplash.com/photo-1512918760532-3ed64bc8066e?auto=format&fit=crop&w=800&q=80'
+  },
+  { 
+    id: '201', 
+    number: 'B-201', 
+    price: 2000000, 
+    facilities: 'AC, TV, Water Heater', 
+    status: ROOM_STATUS.TERISI, 
+    tenantEmail: 'user@kost.com',
+    // Gambar Manual 3
+    image: 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=800&q=80'
+  }
 ];
 
 let complaints = []; 
@@ -47,6 +73,7 @@ const typeDefs = `
     facilities: String
     status: String!
     tenantEmail: String
+    image: String  # Field Image
   }
   type Complaint {
     id: ID!
@@ -74,14 +101,16 @@ const typeDefs = `
     myPayments(email: String!): [Payment!]!
   }
   type Mutation {
-    createRoom(number: String!, price: Int!, facilities: String): Room!
+    # Update mutation createRoom agar menerima input image
+    createRoom(number: String!, price: Int!, facilities: String, image: String): Room!
+    
     updateRoomStatus(id: ID!, status: String!): Room!
     deleteRoom(id: ID!): Boolean
     updateComplaintStatus(id: ID!, status: String!): Complaint!
     confirmPayment(id: ID!): Payment!
     createBill(roomNumber: String!, month: String!, year: String!, amount: Int!): Payment!
     
-    bookRoom(id: ID!): Room! # User Action
+    bookRoom(id: ID!): Room! 
     
     createComplaint(description: String!, roomNumber: String!): Complaint!
     uploadPaymentProof(id: ID!, proofImage: String!): Payment!
@@ -103,7 +132,16 @@ const resolvers = {
   },
   Mutation: {
     createRoom: (_, args) => {
-      const newRoom = { id: uuidv4(), ...args, status: ROOM_STATUS.TERSEDIA, tenantEmail: null };
+      // Logika otomatis gambar default untuk kamar BARU
+      const defaultImage = 'https://images.unsplash.com/photo-1596394516093-501ba68a0ba6?auto=format&fit=crop&w=800&q=80';
+      
+      const newRoom = { 
+        id: uuidv4(), 
+        ...args, 
+        status: ROOM_STATUS.TERSEDIA, 
+        tenantEmail: null,
+        image: args.image || defaultImage // Pakai inputan user atau default
+      };
       rooms.push(newRoom);
       pubsub.publish('ROOM_UPDATED', { roomUpdated: newRoom });
       return newRoom;
@@ -153,14 +191,12 @@ const resolvers = {
       return newPayment;
     },
 
-    // [BAGIAN PENTING: USER BOOKING]
     bookRoom: (_, { id }, context) => {
       if (!context.user) throw new Error('Unauthorized');
       const idx = rooms.findIndex(r => r.id === id);
       if (rooms[idx].status !== ROOM_STATUS.TERSEDIA) throw new Error('Room not available');
       
       // --- LOG TRACING ---
-      // Kita ambil trace ID dari header untuk pembuktian
       const traceId = context.req.headers['x-request-id'] || 'no-trace-id';
       console.log(`[GraphQL] 📝 Memproses Booking Kamar ${rooms[idx].number}`);
       console.log(`[GraphQL] 🔗 Terhubung dengan TraceID: ${traceId}`);
