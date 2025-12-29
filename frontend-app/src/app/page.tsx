@@ -87,10 +87,33 @@ export default function Dashboard() {
       
       {/* SIDEBAR */}
       <aside className="w-full md:w-64 bg-white/90 backdrop-blur-md shadow-xl h-screen sticky top-0 flex flex-col z-10 border-r border-white/50">
+        
+        {/* [UPDATE] Header Sidebar dengan Logo & Nama Aplikasi */}
         <div className="p-6 border-b border-blue-50 bg-gradient-to-r from-blue-600 to-blue-500 text-white">
-          <h1 className="text-2xl font-bold tracking-tight">Kost Apps</h1>
-          <p className="text-sm opacity-90 mt-1 font-light">Hai, {user.name}</p>
-          <span className="text-xs font-bold uppercase bg-white/20 text-white px-2 py-1 rounded mt-3 inline-block border border-white/30">{user.role}</span>
+          <div className="flex items-center gap-3 mb-4">
+            {/* Container Logo */}
+            <div className="relative w-10 h-10 bg-white rounded-xl shadow-lg overflow-hidden shrink-0 border-2 border-white/50">
+               <Image 
+                 src="https://images.unsplash.com/photo-1516893842880-5d8aafa7cc4a" 
+                 alt="Logo Aplikasi"
+                 fill
+                 className="object-cover"
+               />
+            </div>
+            {/* Nama Aplikasi */}
+            <div>
+              <h1 className="text-lg font-extrabold tracking-tight leading-none text-white">
+                KOST<br/><span className="text-blue-100">SEJAHTERA</span>
+              </h1>
+            </div>
+          </div>
+
+          <p className="text-sm opacity-90 mt-1 font-light flex items-center gap-1">
+            <span className="text-lg">👋</span> Hai, {user.name}
+          </p>
+          <span className="text-xs font-bold uppercase bg-white/20 text-white px-2 py-1 rounded mt-3 inline-block border border-white/30 backdrop-blur-sm">
+            {user.role}
+          </span>
         </div>
         
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto">

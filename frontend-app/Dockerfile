@@ -1,9 +1,10 @@
-# Multi-stage build for Next.js frontend
-
+# [FIXED DOCKERFILE]
 # Stage 1: Dependencies
 FROM node:18-alpine AS deps
 WORKDIR /app
 COPY package*.json ./
+# Install sharp untuk optimasi gambar (Penting di Alpine Linux)
+RUN npm install sharp 
 RUN npm ci
 
 # Stage 2: Builder
@@ -12,7 +13,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Disable telemetry during build
+# Disable telemetry
 ENV NEXT_TELEMETRY_DISABLED 1
 
 RUN npm run build
@@ -27,8 +28,8 @@ ENV NEXT_TELEMETRY_DISABLED 1
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-# Copy necessary files
-# COPY --from=builder /app/public ./public
+
+COPY --from=builder /app/public ./public
 COPY --from=builder /app/package.json ./package.json
 
 # Copy built application
