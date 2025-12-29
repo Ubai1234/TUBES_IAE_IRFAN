@@ -28,7 +28,6 @@ let rooms = [
 let complaints = []; 
 let payments = [];   
 
-// Seed Data
 payments.push({
   id: 'pay-1',
   userEmail: 'user@kost.com',
@@ -49,7 +48,6 @@ const typeDefs = `
     status: String!
     tenantEmail: String
   }
-
   type Complaint {
     id: ID!
     userEmail: String!
@@ -58,7 +56,6 @@ const typeDefs = `
     status: String!
     date: String!
   }
-
   type Payment {
     id: ID!
     userEmail: String!
@@ -68,7 +65,6 @@ const typeDefs = `
     status: String!
     proofImage: String
   }
-
   type Query {
     rooms: [Room!]!
     myRoom(email: String!): Room
@@ -77,25 +73,19 @@ const typeDefs = `
     payments: [Payment!]!
     myPayments(email: String!): [Payment!]!
   }
-
   type Mutation {
-    # --- FITUR ADMIN ---
     createRoom(number: String!, price: Int!, facilities: String): Room!
     updateRoomStatus(id: ID!, status: String!): Room!
     deleteRoom(id: ID!): Boolean
     updateComplaintStatus(id: ID!, status: String!): Complaint!
     confirmPayment(id: ID!): Payment!
-    kickUser(email: String!): Boolean
-    
-    # NEW: Admin Create Bill
     createBill(roomNumber: String!, month: String!, year: String!, amount: Int!): Payment!
-
-    # --- FITUR USER ---
-    bookRoom(id: ID!): Room!
+    
+    bookRoom(id: ID!): Room! # User Action
+    
     createComplaint(description: String!, roomNumber: String!): Complaint!
     uploadPaymentProof(id: ID!, proofImage: String!): Payment!
   }
-
   type Subscription {
     roomUpdated: Room!
   }
@@ -112,7 +102,6 @@ const resolvers = {
     myPayments: (_, { email }) => payments.filter(p => p.userEmail === email),
   },
   Mutation: {
-    // --- ADMIN ---
     createRoom: (_, args) => {
       const newRoom = { id: uuidv4(), ...args, status: ROOM_STATUS.TERSEDIA, tenantEmail: null };
       rooms.push(newRoom);
@@ -145,18 +134,12 @@ const resolvers = {
       payments[idx].status = PAYMENT_STATUS.LUNAS;
       return payments[idx];
     },
-    // NEW: Admin membuat tagihan
     createBill: (_, { roomNumber, month, year, amount }, context) => {
-      // Validasi Admin (Sederhana via context/frontend logic yg dikirim)
-      // Di real app, cek context.user.role === 'admin'
-
-      // Cari kamar untuk mendapatkan email penghuni
       const room = rooms.find(r => r.number === roomNumber);
       if (!room) throw new Error('Kamar tidak ditemukan');
-      if (!room.tenantEmail) throw new Error('Kamar ini kosong (tidak ada penyewa)');
+      if (!room.tenantEmail) throw new Error('Kamar ini kosong');
 
-      const fullMonth = `${month} ${year}`; // Format: "Januari 2025"
-
+      const fullMonth = `${month} ${year}`; 
       const newPayment = {
         id: uuidv4(),
         userEmail: room.tenantEmail,
@@ -166,21 +149,26 @@ const resolvers = {
         status: PAYMENT_STATUS.MENUNGGU,
         proofImage: null
       };
-      
       payments.push(newPayment);
       return newPayment;
     },
 
-    // --- USER ---
+    // [BAGIAN PENTING: USER BOOKING]
     bookRoom: (_, { id }, context) => {
       if (!context.user) throw new Error('Unauthorized');
       const idx = rooms.findIndex(r => r.id === id);
       if (rooms[idx].status !== ROOM_STATUS.TERSEDIA) throw new Error('Room not available');
       
+      // --- LOG TRACING ---
+      // Kita ambil trace ID dari header untuk pembuktian
+      const traceId = context.req.headers['x-request-id'] || 'no-trace-id';
+      console.log(`[GraphQL] 📝 Memproses Booking Kamar ${rooms[idx].number}`);
+      console.log(`[GraphQL] 🔗 Terhubung dengan TraceID: ${traceId}`);
+      // --------------------
+
       rooms[idx].status = ROOM_STATUS.DIPESAN; 
       rooms[idx].tenantEmail = context.user.email;
       
-      // Tagihan otomatis bulan pertama
       payments.push({
         id: uuidv4(),
         userEmail: context.user.email,
@@ -194,6 +182,7 @@ const resolvers = {
       pubsub.publish('ROOM_UPDATED', { roomUpdated: rooms[idx] });
       return rooms[idx];
     },
+
     createComplaint: (_, { description, roomNumber }, context) => {
       if (!context.user) throw new Error('Unauthorized');
       const newComplaint = {
@@ -245,6 +234,7 @@ async function startServer() {
   await server.start();
   server.applyMiddleware({ app, path: '/graphql' });
 
-  httpServer.listen(4000, () => console.log(`🚀 GraphQL Service Ready at port 4000`));
+  const PORT = process.env.PORT || 4000;
+  httpServer.listen(PORT, () => console.log(`🚀 GraphQL Service Ready at port ${PORT}`));
 }
 startServer();
