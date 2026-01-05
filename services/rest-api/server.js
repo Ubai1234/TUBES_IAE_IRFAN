@@ -44,10 +44,7 @@ app.get('/health', (req, res) => {
   });
 });
 
-// --- PERBAIKAN DI SINI ---
-// Sebelumnya: app.use('/api/users', userRoutes);
-// Sekarang: app.use('/users', userRoutes);
-// Alasan: Gateway meneruskan request ke /users/..., jadi service harus mendengarkan di /users
+
 app.use('/users', userRoutes);
 
 // Error handling middleware
